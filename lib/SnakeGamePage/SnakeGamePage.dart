@@ -1,22 +1,43 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:snakeapp/Account/Account.dart';
+import 'package:snakeapp/AccountStorage/AccountStorage.dart';
+import 'package:snakeapp/main.dart';
 
-class SnakePage extends StatefulWidget {
-  const SnakePage({super.key});
+// SnakeGamePage
+class SnakeGamePage extends StatefulWidget {
+  final int level;
+  final Account account;
+  const SnakeGamePage({super.key, required this.level, required this.account});
   @override
-  State<SnakePage> createState() => _SnakePageState();
+  State<SnakeGamePage> createState() => _SnakeGamePageState();
 }
 
-class _SnakePageState extends State<SnakePage> {
-  static const int rowCount = 20;
-  static const int colCount = 20;
-  static const int totalCells = rowCount * colCount;
+class _SnakeGamePageState extends State<SnakeGamePage> {
+  late int level = widget.level;
+  late Account account = widget.account;
+
+  int get rowCount => 20 - (level - 1) * 2;
+  int get colCount => 20 - (level - 1) * 2;
+  int get totalCells => rowCount * colCount;
+
+  Duration get speed {
+    switch (level) {
+      case 1:
+        return const Duration(milliseconds: 300);
+      case 2:
+        return const Duration(milliseconds: 220);
+      case 3:
+        return const Duration(milliseconds: 150);
+      default:
+        return const Duration(milliseconds: 300);
+    }
+  }
 
   Direction direction = Direction.right;
   List<int> snake = [45, 44, 43];
   int food = 100;
   Timer? _timer;
-  Duration speed = const Duration(milliseconds: 300);
 
   @override
   void initState() {
@@ -29,12 +50,14 @@ class _SnakePageState extends State<SnakePage> {
     direction = Direction.right;
     generateFood();
     _timer?.cancel();
-    _timer = Timer.periodic(speed, (timer) => moveSnake());
+    _timer = Timer.periodic(speed, (_) => moveSnake());
   }
 
   void generateFood() {
-    food = (List.generate(totalCells, (i) => i)..shuffle())
-        .firstWhere((i) => !snake.contains(i));
+    food = (List.generate(
+      totalCells,
+      (i) => i,
+    )..shuffle()).firstWhere((i) => !snake.contains(i));
   }
 
   void moveSnake() {
@@ -75,26 +98,52 @@ class _SnakePageState extends State<SnakePage> {
     });
   }
 
-  void showGameOverDialog() {
-    Future.microtask(() {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          title: const Text('انتهت اللعبة'),
-          content: Text('النتيجة: ${snake.length - 3}'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                startGame();
-              },
-              child: const Text('إعادة اللعب'),
-            ),
-          ],
-        ),
-      );
-    });
+  void showGameOverDialog() async {
+    final score = snake.length - 3;
+    if (level == account.level && score >= 20) {
+      // ✅ غيّر هنا إلى 20 أو أقل للتجربة
+      final newLevel = account.level + 1;
+      if (newLevel <= 3) {
+        final accounts = await AccountStorage.loadAccounts();
+        final index = accounts.indexWhere(
+          (a) => a.username == account.username,
+        );
+        if (index != -1) {
+          accounts[index] = Account(
+            username: account.username,
+            password: account.password,
+            level: newLevel,
+          );
+          await AccountStorage.saveAccounts(accounts);
+          account = accounts[index];
+        }
+      }
+    }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('انتهت اللعبة'),
+        content: Text('النتيجة: $score'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text('العودة'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              startGame();
+            },
+            child: const Text('إعادة'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -107,12 +156,11 @@ class _SnakePageState extends State<SnakePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Snake Game'),
+        title: Text('مستوى $level'),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.restart_alt_rounded),
-            tooltip: 'إعادة اللعب',
             onPressed: startGame,
           ),
         ],
@@ -123,13 +171,13 @@ class _SnakePageState extends State<SnakePage> {
             child: GridView.builder(
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: colCount,
                 crossAxisSpacing: 1,
                 mainAxisSpacing: 1,
               ),
               itemCount: totalCells,
-              itemBuilder: (context, index) {
+              itemBuilder: (_, index) {
                 if (snake.contains(index)) {
                   return Container(
                     decoration: BoxDecoration(
@@ -194,5 +242,3 @@ class _SnakePageState extends State<SnakePage> {
     );
   }
 }
-
-enum Direction { up, down, left, right }
